@@ -1,10 +1,15 @@
 LoadPackage("CAP");
 
+finset := CreateCapCategory("FinSet");
+
+IsFinSetObj := ObjectFilter(finset);
+IsFinSetMorph := MorphismFilter(finset);
 
 # Finite Sets
 DeclareRepresentation("IsFinSetRep", IsAttributeStoringRep, []);
 DeclareCategory("IsFinSet", IsFinSetRep);
-FinSetType := NewType(NewFamily("FinSetFamily"), IsFinSet);
+FinSetType := NewType(NewFamily("FinSetFamily"), 
+                      IsFinSet and IsFinSetObj and IsCapCategoryObject);
 
 DeclareAttribute("UnderlyingList", IsFinSet);
 DeclareAttribute("Size", IsFinSet);
@@ -19,7 +24,8 @@ FinSet := function(list)
 
     r := Objectify(FinSetType, rec());
     SetUnderlyingList(r, StructuralCopy(list));
-
+    AddObject(finset, r);
+    
     return r;
 end;
 
@@ -57,7 +63,7 @@ InstallMethod(ViewString, "Show a finite set", [IsFinSet],
 # Morphisms between finite sets
 DeclareRepresentation("IsFinSetMorphismRep", IsAttributeStoringRep, []);
 DeclareCategory("IsFinSetMorphism", IsFinSetMorphismRep);
-FinSetMorphismType := NewType(NewFamily("FinSetMorphismFamily"), IsFinSetMorphism);
+FinSetMorphismType := NewType(NewFamily("FinSetMorphismFamily"), IsFinSetMorphism and IsCapCategoryMorphism);
 
 DeclareAttribute("Source", IsFinSetMorphism);
 DeclareAttribute("Range", IsFinSetMorphism);
@@ -103,31 +109,9 @@ FinSetMorphism := function (source, target, arrow)
     SetSource(r,source);
     SetRange(r,target);
     SetArrow(r,arrow);
+    AddMorphism(finset,r);
     
     return r;
-end;
-
-Compose := function (g, f)
-    local mph, r, fp, gp;
-    r := [];
-    
-    if not(Source(g) = Range(f)) then 
-        Error("Non-composable morphisms");
-    fi;
-    
-    for fp in Arrow(f) do
-        for gp in Arrow(g) do
-            if (fp[2] = gp[1]) then
-                Add(r,[fp[1],gp[2]]);
-            fi;
-        od;
-    od;
-    
-    mph := Objectify(FinSetMorphismType, rec());
-    SetSource(mph,Source(f));
-    SetRange(mph,Range(g));
-    SetArrow(mph,r);
-    return mph;
 end;
 
 InstallMethod(ViewString, "Show a finite set morphism", [IsFinSetMorphism],
@@ -140,23 +124,44 @@ InstallMethod(ViewString, "Show a finite set morphism", [IsFinSetMorphism],
                                        String(Arrow(m)));
               end);
 
-IdMorphism := function (A)
-    local l, r;
-    l := List(UnderlyingList(A), x -> [x,x]);
-    
-    r := Objectify(FinSetMorphismType, rec());
-    SetSource(r,A);
-    SetRange(r,A);
-    SetArrow(r,l);
-    return r;
-end;
-
-
 
 ####################
 # CAP Category
 ####################
-finset := CreateCapCategory("FinSet");
-AddPreCompose(finset, Compose);
-AddIdentityMorphism(finset, IdMorphism);
+AddPreCompose(finset, 
+             function (g, f)
+                 local mph, r, fp, gp;
+                 r := [];
+    
+                 if not(Source(g) = Range(f)) then 
+                     Error("Non-composable morphisms");
+                 fi;
+                 
+                 for fp in Arrow(f) do
+                     for gp in Arrow(g) do
+                         if (fp[2] = gp[1]) then
+                             Add(r,[fp[1],gp[2]]);
+                         fi;
+                     od;
+                 od;
+                 
+                 mph := Objectify(FinSetMorphismType, rec());
+                 SetSource(mph,Source(f));
+                 SetRange(mph,Range(g));
+                 SetArrow(mph,r);
+                 return mph;
+             end);
+
+AddIdentityMorphism(finset, 
+                   function (A)
+                       local l, r;
+                       l := List(UnderlyingList(A), x -> [x,x]);
+    
+                       r := Objectify(FinSetMorphismType, rec());
+                       SetSource(r,A);
+                       SetRange(r,A);
+                       SetArrow(r,l);
+                       return r;
+                   end);
+
 AddIsEqualForObjects(finset, function (A,B) return A = B; end);
