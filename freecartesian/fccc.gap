@@ -371,11 +371,14 @@ tounitRule := function (ctx, a)
     local typeofa;
     typeofa := GetTypeOf(ctx, a);
     
-    if IsExpo(typeofa) then
-        if typeEquality(ExpComp(typeofa), Topt()) then
-            return Abs(BaseComp(typeofa), Ast());
+    if IsConst(a) then
+        if IsExpo(typeofa) then
+            if typeEquality(ExpComp(typeofa), Topt()) then
+                return Abs(BaseComp(typeofa), Ast());
+            fi;
         fi;
     fi;
+    
     return a;
 end;
 
@@ -408,11 +411,47 @@ pairRule := function (a)
     fi;
 end;
 
-etaRule := function (a)
+etaRule := function (ctx,a)
     # Eta extensionality for functions
     #   lambda (app f 1) > f
-    if IsAbs(a) and IsApp(Expr(a)) and IsVar(Arg(Expr(a))) and Index(Arg(Expr(a))) = 1 then
-        return Fun(Expr(a));
+    # (var 1) must not appear in f
+    
+    local varnfree, decrease, initialtype, finaltype, r;
+    varnfree := function (n,f) Error("not yet implemented"); end;
+    varnfree := function (n,f)
+        if IsAst(f) then return true; fi;
+        if IsConst(f) then return true; fi;
+        if IsVar(f) then return not Index(f) = n; fi;
+        if IsAbs(f) then return varnfree(n+1,f); fi;
+        if IsApp(f) then return varnfree(n,Fun(f)) and varnfree(n,Arg(f)); fi;
+        if IsPair(f) then return varnfree(n,Frst(f)) and varnfree(n,Second(f)); fi;
+        if IsFst(f) then return varnfree(n,Expr(f)); fi;
+        if IsSnd(f) then return varnfree(n,Expr(f)); fi;
+    end;
+    
+    # After substitution, variables must decrease a number
+    decrease := function (n,f) Error("not yet implemented"); end;
+    decrease := function (n,f)
+        if IsAst(f) then return f; fi;
+        if IsConst(f) then return f; fi;
+        if IsVar(f) and Index(f) > n then return Var(Index(f)-1); fi;
+        if IsAbs(f) then return Abs(TypeOfExpr(f), decrease(n+1,Expr(f))); fi;
+        if IsApp(f) then return App(decrease(n,Fun(f)), decrease(n,Arg(f))); fi;
+        if IsPair(f) then return Pair(decrease(n,Frst(f)), decrease(n,Second(f))); fi;
+        if IsFst(f) then return Fst(decrease(n,Expr(f))); fi;
+        if IsSnd(f) then return Snd(decrease(n,Expr(f))); fi;        
+    end;
+    
+    
+    initialtype := GetTypeOf(ctx,a);
+        
+    if IsAbs(a) and IsApp(Expr(a)) and IsVar(Arg(Expr(a))) and Index(Arg(Expr(a))) = 1 and varnfree(1,Fun(Expr(a))) then
+        r := decrease(1,Fun(Expr(a)));
+        finaltype := GetTypeOf(ctx,r);
+        if not typeEquality(initialtype,finaltype) then 
+            Error("Subject reduction failed.\n", "Initial term: ", PrintExpression(a), "\nFinal term: ", PrintExpression(r));
+        fi;
+        return r;
     else
         return a;
     fi;    
@@ -457,7 +496,7 @@ simplify := function (ctx , a, debug)
     if debug then
         Print(Concatenation(["simpl: ", PrintExpression(a), "\n"]));
     fi;
-    newa := recursivelySimplify(ctx,appRule(etaRule(pairRule(sndRule(fstRule(unitRule(ctx,tounitRule(ctx,a))))))));
+    newa := recursivelySimplify(ctx,etaRule(ctx,appRule(pairRule(sndRule(fstRule(unitRule(ctx,tounitRule(ctx,a))))))));
     if debug then
         Print(Concatenation(["simpl: ", PrintExpression(newa), "\n"]));
     fi;
